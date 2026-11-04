@@ -1,0 +1,235 @@
+
+#include <Servo.h>
+#include <LiquidCrystal.h>
+
+// Senzor ultrasonic
+const int TRIG = 10;
+const int ECHO = 11;
+
+// Servo
+const int SERVO_PIN = 9;
+const int INCHIS = 0;
+const int DESCHIS = 90;
+
+// LED-uri
+const int LED_VERDE = 6;
+const int LED_ROSU = 7;
+
+// LCD 1602
+LiquidCrystal lcd(12, 8, 5, 4, 3, 2);
+
+// Butoane si buzzer
+const int BUTON_RESET = A0;
+const int BUTON_IESIRE = A1;
+const int BUZZER = 13;
+
+// Locuri parcare
+const int TOTAL_LOCURI = 3;
+int locuriLibere = TOTAL_LOCURI;
+
+Servo bariera;
+
+bool barieraDeschisa = false;
+bool masinaPrezenta = false;
+
+unsigned long timpLiber = 0;
+
+// Citire distanta
+int citesteDistanta() {
+  digitalWrite(TRIG, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(TRIG, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TRIG, LOW);
+
+  unsigned long durata = pulseIn(ECHO, HIGH, 30000UL);
+
+  if (durata == 0) return -1;
+
+  return durata * 0.0343 / 2;
+}
+
+// Actualizare LCD
+void actualizeazaLCD() {
+  lcd.clear();
+
+  if (locuriLibere == 0) {
+    lcd.setCursor(1, 0);
+    lcd.print("PARCARE PLINA");
+
+    lcd.setCursor(2, 1);
+    lcd.print("NU INTRATI!");
+  } 
+  else {
+    lcd.setCursor(1, 0);
+    lcd.print("SMART PARKING");
+
+    lcd.setCursor(0, 1);
+    lcd.print("Locuri libere: ");
+    lcd.print(locuriLibere);
+  }
+}
+
+// Actualizare LED-uri
+void actualizeazaLEDuri() {
+  if (locuriLibere > 0) {
+    digitalWrite(LED_VERDE, HIGH);
+    digitalWrite(LED_ROSU, LOW);
+  } 
+  else {
+    digitalWrite(LED_VERDE, LOW);
+    digitalWrite(LED_ROSU, HIGH);
+  }
+}
+
+// Actualizare generala
+void actualizeazaSistem() {
+  actualizeazaLCD();
+  actualizeazaLEDuri();
+}
+
+// Inchidere bariera
+void inchideBariera() {
+  bariera.write(INCHIS);
+  barieraDeschisa = false;
+}
+
+// Alarma parcare plina
+void avertizareParcarePlina() {
+  for (int i = 0; i < 3; i++) {
+    tone(BUZZER, 1500);
+    delay(180);
+    noTone(BUZZER);
+    delay(120);
+  }
+}
+
+// Resetare parcare
+void reseteazaParcarea() {
+  locuriLibere = TOTAL_LOCURI;
+  masinaPrezenta = false;
+  timpLiber = 0;
+
+  inchideBariera();
+
+  noTone(BUZZER);
+
+  actualizeazaSistem();
+}
+
+// Inregistrare iesire
+void inregistreazaIesire() {
+  if (locuriLibere < TOTAL_LOCURI) {
+    locuriLibere++;
+
+    tone(BUZZER, 1000, 120);
+
+    actualizeazaSistem();
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
+
+  pinMode(LED_VERDE, OUTPUT);
+  pinMode(LED_ROSU, OUTPUT);
+
+  pinMode(BUTON_RESET, INPUT_PULLUP);
+  pinMode(BUTON_IESIRE, INPUT_PULLUP);
+
+  pinMode(BUZZER, OUTPUT);
+
+  bariera.attach(SERVO_PIN);
+  bariera.write(INCHIS);
+
+  lcd.begin(16, 2);
+
+  actualizeazaSistem();
+}
+
+void loop() {
+
+  // BUTON RESET
+  if (digitalRead(BUTON_RESET) == LOW) {
+    delay(30);
+
+    if (digitalRead(BUTON_RESET) == LOW) {
+      reseteazaParcarea();
+
+      while (digitalRead(BUTON_RESET) == LOW) {
+        delay(10);
+      }
+    }
+  }
+
+  // BUTON IESIRE
+  if (digitalRead(BUTON_IESIRE) == LOW) {
+    delay(30);
+
+    if (digitalRead(BUTON_IESIRE) == LOW) {
+      inregistreazaIesire();
+
+      while (digitalRead(BUTON_IESIRE) == LOW) {
+        delay(10);
+      }
+    }
+  }
+
+  // Citire senzor
+  int distanta = citesteDistanta();
+
+  Serial.print("Distanta: ");
+  Serial.println(distanta);
+
+  // Detectare masina
+  if (distanta > 0 && distanta <= 15) {
+
+    if (!masinaPrezenta) {
+
+      masinaPrezenta = true;
+
+      if (locuriLibere > 0) {
+
+        locuriLibere--;
+
+        bariera.write(DESCHIS);
+        barieraDeschisa = true;
+
+      } 
+      else {
+        avertizareParcarePlina();
+      }
+
+      actualizeazaSistem();
+    }
+
+    timpLiber = 0;
+  }
+
+  // Masina s-a indepartat
+  else if (distanta > 20) {
+
+    if (timpLiber == 0) {
+      timpLiber = millis();
+    }
+
+    if (millis() - timpLiber >= 2000) {
+
+      if (barieraDeschisa) {
+        inchideBariera();
+      }
+
+      masinaPrezenta = false;
+    }
+  }
+
+  else {
+    timpLiber = 0;
+  }
+
+  delay(100);
+}
