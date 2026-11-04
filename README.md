@@ -1,5 +1,5 @@
 # Smart_Parking_Arduino_UNO
-*Detecteaza automat vehiculele la intrare folosind un seznor ultrasonic.
+*Detecteaza automat vehiculele la intrare folosind un senzor ultrasonic.
 *Controleaza bariera de acces cu ajutorul unui servomotor.
 *Afiseaza numarul de locuri libere impreuna cu mesajele "Parcare PLina" / "Parcarea Goala" pe un ecran LCD.
 *Ofera feedback vizual (2xLED) si sonor(1x Buzzer Pasiv)
